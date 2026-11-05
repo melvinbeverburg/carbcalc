@@ -7,7 +7,13 @@
 <meta name="color-scheme" content="dark light">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Carb Calculator">
+<meta name="apple-mobile-web-app-title" content="Carb Calc">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="format-detection" content="telephone=no">
+<!-- Einzige Stelle für die Versionsnummer. Beim Release hier ändern und CHANGELOG.md ergänzen. -->
+<meta name="app-version" content="1.1.0">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="description" content="Carbs und Wasser pro Einheit berechnen und den eigenen Fuel Stack zusammenstellen. Für Laufen, Rad und Schwimmen.">
 <title>Carb Calculator</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230A0F18'/%3E%3Cpath d='M32 10c8 10 14 17 14 26a14 14 0 0 1-28 0c0-9 6-16 14-26z' fill='%235B9BFF'/%3E%3C/svg%3E">
@@ -466,6 +472,14 @@ dialog[open] { animation: sheetin 0.3s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
 
       <div class="list-title">Darstellung</div>
       <div class="pad list"><div class="seg" id="modeSeg" role="radiogroup" aria-label="Darstellung"></div></div>
+
+      <div class="list-title">App</div>
+      <div class="list">
+        <button type="button" class="row add" id="installBtn" hidden><span class="main"><span class="title">Als App installieren</span><span class="sub">Eigenes Symbol, Vollbild, funktioniert offline</span></span></button>
+        <div class="row" id="verRow"><span class="main"><span class="title">Version</span><span class="sub" id="verSub"></span></span><span class="sub" id="verNum"></span></div>
+        <button type="button" class="row add" id="updBtn"><span class="main"><span class="title" id="updTitle">Nach Update suchen</span><span class="sub" id="updSub">Prüft, ob eine neuere Version online ist</span></span></button>
+      </div>
+      <p class="list-note" id="installNote"></p>
 
       <div class="list-title">Daten</div>
       <div class="list"><button type="button" class="row danger" id="resetBtn"><span class="main"><span class="title">Alles zurücksetzen</span><span class="sub">Personen, Stacks und eigenes Fuel auf Anfang</span></span></button></div>
@@ -1369,9 +1383,90 @@ function renderAll() {
   updateCalc();
 }
 
+/* ============================================================
+   App: Version, Installation, Updates
+   ============================================================ */
+const APP_VERSION = (document.querySelector('meta[name="app-version"]') || {}).content || '0.0.0';
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let installEvent = null;
+
+function cmpVer(a, b) {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+function renderApp() {
+  $('verNum').textContent = APP_VERSION;
+  $('verSub').textContent = isStandalone() ? 'Läuft als installierte App' : 'Läuft im Browser';
+  $('installBtn').hidden = !installEvent || isStandalone();
+  let note = '';
+  if (isStandalone()) note = 'Die App ist installiert. Sie startet auch ohne Netz und holt Updates automatisch, sobald du online bist.';
+  else if (installEvent) note = 'Die Installation legt ein Symbol auf den Startbildschirm.';
+  else if (isIOS()) note = 'iPhone und iPad: Öffne die Seite in Safari, tippe auf Teilen und dann auf „Zum Home-Bildschirm“. Die installierte App hat einen eigenen Speicher, Personen und Stacks aus Safari werden nicht übernommen.';
+  else note = 'Android: Im Chrome-Menü (drei Punkte) auf „App installieren“ oder „Zum Startbildschirm hinzufügen“ tippen.';
+  $('installNote').textContent = note;
+}
+
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; renderApp(); });
+window.addEventListener('appinstalled', () => { installEvent = null; renderApp(); });
+$('installBtn').addEventListener('click', async () => {
+  if (!installEvent) return;
+  installEvent.prompt();
+  try { await installEvent.userChoice; } catch (e) { /* ignorieren */ }
+  installEvent = null; renderApp();
+});
+
+function setUpd(title, sub) { $('updTitle').textContent = title; $('updSub').textContent = sub; }
+$('updBtn').addEventListener('click', async () => {
+  const btn = $('updBtn');
+  if (btn.disabled) return;
+  btn.disabled = true; setUpd('Suche läuft …', 'Einen Moment');
+  try {
+    const res = await fetch('index.html?check=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error(String(res.status));
+    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+    const remote = (doc.querySelector('meta[name="app-version"]') || {}).content;
+    if (!remote) throw new Error('keine Version');
+    if (cmpVer(remote, APP_VERSION) > 0) {
+      setUpd('Version ' + remote + ' wird geladen …', 'Die App startet gleich neu');
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update();
+        if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.filter(k => k.startsWith('carb-calculator-')).map(k => caches.delete(k))); }
+      } catch (e) { /* ignorieren */ }
+      setTimeout(() => location.reload(), 600);
+      return;
+    }
+    setUpd('Du hast die neueste Version', 'Version ' + APP_VERSION + ', gerade geprüft');
+  } catch (e) {
+    setUpd('Keine Verbindung', 'Prüfung nicht möglich. Es bleibt bei Version ' + APP_VERSION + '.');
+  }
+  btn.disabled = false;
+  setTimeout(() => { if (!btn.disabled) setUpd('Nach Update suchen', 'Prüft, ob eine neuere Version online ist'); }, 6000);
+});
+
+// Service Worker: Die Version steckt in der Adresse, ein neuer Wert installiert einen neuen Cache
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js?v=' + encodeURIComponent(APP_VERSION)).catch(() => { /* Offline-Betrieb optional */ });
+  });
+  // Ein neuer Worker übernimmt sofort: Seite einmal neu laden, damit sie zur Version passt
+  let hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) location.reload();
+    hadController = true;
+  });
+}
+
 buildThemeList();
 buildList();
 renderAll();
+renderApp();
 setTab('calc');
 </script>
 </body>
