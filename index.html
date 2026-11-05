@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="format-detection" content="telephone=no">
 <!-- Einzige Stelle für die Versionsnummer. Beim Release hier ändern und CHANGELOG.md ergänzen. -->
-<meta name="app-version" content="1.1.0">
+<meta name="app-version" content="1.1.1">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="description" content="Carbs und Wasser pro Einheit berechnen und den eigenen Fuel Stack zusammenstellen. Für Laufen, Rad und Schwimmen.">
@@ -694,7 +694,7 @@ const GROUPS = ['Gels und Pulver', 'Flüssig', 'Essen', 'Eigenes'];
 const BASE_ITEMS = [
   { id: 'gel25', grp: 'Gels und Pulver', name: 'Gel klein', sub: '25 g, z. B. Maurten Gel 100', c: 25, f: 0, fr: 0.4 },
   { id: 'gel40', grp: 'Gels und Pulver', name: 'Gel groß', sub: '40 g, z. B. Maurten Gel 160', c: 40, f: 0, fr: 0.4 },
-  { id: 'malto', grp: 'Gels und Pulver', name: 'Maltodextrin', sub: '1,5 Scoops, 50 g in 100 ml Wasser', c: 47.5, f: 100, fr: 0, powder: 50 },
+  { id: 'malto', grp: 'Gels und Pulver', name: 'Maltodextrin', sub: '1,5 Scoops (50 g) in 100 ml Wasser', c: 47.5, f: 100, fr: 0, powder: 50, scoops: 1.5 },
   { id: 'drink', grp: 'Gels und Pulver', name: 'Carb-Getränk (gekauft)', sub: 'Fertigpulver auf 500 ml, z. B. Maurten Drink Mix 160', c: 40, f: 500, fr: 0.4 },
   { id: 'saft', grp: 'Flüssig', name: 'Apfelsaft', sub: '200 ml Glas', c: 21, f: 200, fr: 0.65 },
   { id: 'schorle', grp: 'Flüssig', name: 'Apfelschorle', sub: '500 ml, halb Saft halb Wasser', c: 26, f: 500, fr: 0.65 },
@@ -785,6 +785,8 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const nf = (n, d = 0) => n.toLocaleString('de-DE', { maximumFractionDigits: d, minimumFractionDigits: d });
 const nf1 = n => n.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+// Mischanleitung für Pulver: "3 Scoops (100 g) in 200 ml Wasser"
+const mixTxt = (i, n = 1) => nf1(n * i.scoops) + ' Scoops (' + nf(n * i.powder) + ' g) in ' + nf(n * i.f) + ' ml Wasser';
 const fmtMl = ml => ml >= 1000 ? nf(ml / 1000, 1) + ' l' : nf(ml) + ' ml';
 const fmtDur = h => {
   const min = Math.round(h * 60);
@@ -1000,7 +1002,7 @@ function renderStack(r, p) {
     sb.textContent = i.sub + ' · ' + nf1(i.c) + ' g';
     if (n > 1) {
       sb.append(' = '); sb.appendChild(el('b', '', nf1(n * i.c) + ' g'));
-      if (i.powder) sb.append(' · ' + nf(n * i.powder) + ' g Pulver in ' + nf(n * i.f) + ' ml');
+      if (i.powder) sb.append(' · ' + mixTxt(i, n));
       else if (i.f > 0) sb.append(' · ' + nf(n * i.f) + ' ml');
     }
   });
@@ -1106,7 +1108,7 @@ function renderTimeline(r, p, ev) {
   const li0 = el('li'); li0.append(el('span', 't', 'Laufend'), el('span', 'd', 'Wasser ca. ' + nf(r.fluidH) + ' ml/h' + (sips.length ? ', ' + sips.map(i => i.name + ' ×' + p.qty[i.id]).join(', ') : '')));
   list.appendChild(li0);
   ev.forEach(e => {
-    const li = el('li'); li.append(el('span', 't', fmtClock(e.t)), el('span', 'd', e.name + ' (' + nf1(e.c) + ' g' + (e.f ? ', ' + nf(e.f) + ' ml' : '') + ')'));
+    const li = el('li'); li.append(el('span', 't', fmtClock(e.t)), el('span', 'd', e.name + ' (' + nf1(e.c) + ' g' + (e.powder ? ', ' + mixTxt(e) : e.f ? ', ' + nf(e.f) + ' ml' : '') + ')'));
     list.appendChild(li);
   });
   const lz = el('li'); lz.append(el('span', 't', fmtClock(D)), el('span', 'd', 'Ziel')); list.appendChild(lz);

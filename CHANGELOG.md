@@ -2,6 +2,10 @@
 
 Die Versionen folgen Semantic Versioning: Hauptversion.Nebenversion.Fehlerkorrektur.
 
+## 1.1.1 (5. November 2026)
+
+- Maltodextrin zeigt die Menge in Scoops an: in der Stack-Zeile, in der Summe bei mehreren Portionen und im Zeitplan (z. B. „3 Scoops (100 g) in 200 ml Wasser“).
+
 ## 1.1.0 (5. November 2026)
 
 - Als App installierbar (PWA) auf iOS und Android, läuft auch offline.
